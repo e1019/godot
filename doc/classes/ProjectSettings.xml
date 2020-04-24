@@ -441,6 +441,9 @@
 		<member name="display/window/size/borderless" type="bool" setter="" getter="" default="false">
 			Force the window to be borderless.
 		</member>
+		<member name="display/window/size/noactive" type="bool" setter="" getter="" default="false">
+			Force the window to be noactive.
+		</member>
 		<member name="display/window/size/fullscreen" type="bool" setter="" getter="" default="false">
 			Sets the window to full screen when it starts.
 		</member>

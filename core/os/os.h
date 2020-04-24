@@ -98,18 +98,20 @@ public:
 		bool fullscreen;
 		bool resizable;
 		bool borderless_window;
+		bool noactive_window;
 		bool maximized;
 		bool always_on_top;
 		bool use_vsync;
 		bool vsync_via_compositor;
 		bool layered;
 		float get_aspect() const { return (float)width / (float)height; }
-		VideoMode(int p_width = 1024, int p_height = 600, bool p_fullscreen = false, bool p_resizable = true, bool p_borderless_window = false, bool p_maximized = false, bool p_always_on_top = false, bool p_use_vsync = false, bool p_vsync_via_compositor = false) {
+		VideoMode(int p_width = 1024, int p_height = 600, bool p_fullscreen = false, bool p_resizable = true, bool p_borderless_window = false, bool p_noactive_window = false, bool p_maximized = false, bool p_always_on_top = false, bool p_use_vsync = false, bool p_vsync_via_compositor = false) {
 			width = p_width;
 			height = p_height;
 			fullscreen = p_fullscreen;
 			resizable = p_resizable;
 			borderless_window = p_borderless_window;
+			noactive_window = p_noactive_window;
 			maximized = p_maximized;
 			always_on_top = p_always_on_top;
 			use_vsync = p_use_vsync;
@@ -242,6 +244,9 @@ public:
 
 	virtual void set_borderless_window(bool p_borderless) {}
 	virtual bool get_borderless_window() { return 0; }
+
+	virtual void set_noactive_window(bool p_noactive) {}
+	virtual bool get_noactive_window() { return 0; }
 
 	virtual bool get_window_per_pixel_transparency_enabled() const { return false; }
 	virtual void set_window_per_pixel_transparency_enabled(bool p_enabled) {}

@@ -274,6 +274,7 @@ protected:
 	bool maximized;
 	bool minimized;
 	bool borderless;
+	bool noactive;
 	bool window_focused;
 	bool console_visible;
 	bool was_maximized;
@@ -330,6 +331,9 @@ public:
 
 	virtual void set_borderless_window(bool p_borderless);
 	virtual bool get_borderless_window();
+
+	virtual void set_noactive_window(bool p_noactive);
+	virtual bool get_noactive_window();
 
 	virtual bool get_window_per_pixel_transparency_enabled() const;
 	virtual void set_window_per_pixel_transparency_enabled(bool p_enabled);

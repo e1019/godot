@@ -947,6 +947,9 @@
 			If [code]true[/code], removes the window frame.
 			[b]Note:[/b] Setting [code]window_borderless[/code] to [code]false[/code] disables per-pixel transparency.
 		</member>
+		<member name="window_noactive" type="bool" setter="set_noactive_window" getter="get_noactive_window" default="false">
+			If [code]true[/code], makes the window unfocusable.
+		</member>
 		<member name="window_fullscreen" type="bool" setter="set_window_fullscreen" getter="is_window_fullscreen" default="false">
 			If [code]true[/code], the window is fullscreen.
 		</member>

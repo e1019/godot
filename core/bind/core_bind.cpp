@@ -237,7 +237,7 @@ void _OS::set_clipboard(const String &p_text) {
 String _OS::get_clipboard() const {
 
 	return OS::get_singleton()->get_clipboard();
-}
+}	
 
 int _OS::get_video_driver_count() const {
 	return OS::get_singleton()->get_video_driver_count();
@@ -402,6 +402,14 @@ bool _OS::is_window_always_on_top() const {
 
 bool _OS::is_window_focused() const {
 	return OS::get_singleton()->is_window_focused();
+}
+
+void _OS::set_noactive_window(bool p_noactive){
+	OS::get_singleton()->set_noactive_window(p_noactive);
+}
+
+bool _OS::get_noactive_window() const{
+	return OS::get_singleton()->get_noactive_window();
 }
 
 void _OS::set_borderless_window(bool p_borderless) {
@@ -1239,6 +1247,9 @@ void _OS::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_borderless_window", "borderless"), &_OS::set_borderless_window);
 	ClassDB::bind_method(D_METHOD("get_borderless_window"), &_OS::get_borderless_window);
 
+	ClassDB::bind_method(D_METHOD("get_noactive_window"), &_OS::get_noactive_window);
+	ClassDB::bind_method(D_METHOD("set_noactive_window", "noactive"), &_OS::set_noactive_window);
+
 	ClassDB::bind_method(D_METHOD("get_window_per_pixel_transparency_enabled"), &_OS::get_window_per_pixel_transparency_enabled);
 	ClassDB::bind_method(D_METHOD("set_window_per_pixel_transparency_enabled", "enabled"), &_OS::set_window_per_pixel_transparency_enabled);
 
@@ -1379,6 +1390,7 @@ void _OS::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "screen_orientation", PROPERTY_HINT_ENUM, "Landscape,Portrait,Reverse Landscape,Reverse Portrait,Sensor Landscape,Sensor Portrait,Sensor"), "set_screen_orientation", "get_screen_orientation");
 	ADD_GROUP("Window", "window_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "window_borderless"), "set_borderless_window", "get_borderless_window");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "window_noactive"), "set_noactive_window", "get_noactive_window");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "window_per_pixel_transparency_enabled"), "set_window_per_pixel_transparency_enabled", "get_window_per_pixel_transparency_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "window_fullscreen"), "set_window_fullscreen", "is_window_fullscreen");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "window_maximized"), "set_window_maximized", "is_window_maximized");
@@ -1401,6 +1413,7 @@ void _OS::_bind_methods() {
 	ADD_PROPERTY_DEFAULT("max_window_size", Vector2());
 	ADD_PROPERTY_DEFAULT("screen_orientation", 0);
 	ADD_PROPERTY_DEFAULT("window_borderless", false);
+	ADD_PROPERTY_DEFAULT("window_noactive", false);
 	ADD_PROPERTY_DEFAULT("window_per_pixel_transparency_enabled", false);
 	ADD_PROPERTY_DEFAULT("window_fullscreen", false);
 	ADD_PROPERTY_DEFAULT("window_maximized", false);

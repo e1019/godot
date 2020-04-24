@@ -219,6 +219,7 @@ void OS_Windows::initialize_core() {
 	maximized = false;
 	minimized = false;
 	borderless = false;
+	noactive = false;
 
 	ThreadWindows::make_default();
 	SemaphoreWindows::make_default();
@@ -1357,6 +1358,10 @@ Error OS_Windows::initialize(const VideoMode &p_desired, int p_video_driver, int
 			dwStyle &= ~WS_MAXIMIZEBOX;
 		}
 	}
+	printf("video_mode noactive: %d", video_mode.noactive_window ? 1 : 0);
+	if(video_mode.noactive_window){
+		dwExStyle |= WS_EX_NOACTIVATE;
+	}
 
 	AdjustWindowRectEx(&WindowRect, dwStyle, FALSE, dwExStyle);
 
@@ -2219,6 +2224,22 @@ bool OS_Windows::get_borderless_window() {
 	return video_mode.borderless_window;
 }
 
+void OS_Windows::set_noactive_window(bool p_noactive) {
+	if (video_mode.noactive_window == p_noactive)
+		return;
+
+	video_mode.noactive_window = p_noactive;
+
+	preserve_window_size = true;
+	_update_window_style();
+}
+
+bool OS_Windows::get_noactive_window() {
+	return video_mode.noactive_window;
+}
+
+
+
 void OS_Windows::_update_window_style(bool p_repaint, bool p_maximized) {
 	if (video_mode.fullscreen || video_mode.borderless_window) {
 		SetWindowLongPtr(hWnd, GWL_STYLE, WS_SYSMENU | WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE);
@@ -2233,6 +2254,7 @@ void OS_Windows::_update_window_style(bool p_repaint, bool p_maximized) {
 			SetWindowLongPtr(hWnd, GWL_STYLE, WS_CAPTION | WS_MINIMIZEBOX | WS_POPUPWINDOW | WS_VISIBLE);
 		}
 	}
+	
 
 	SetWindowPos(hWnd, video_mode.always_on_top ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
 

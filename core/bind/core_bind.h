@@ -206,6 +206,9 @@ public:
 	virtual void set_borderless_window(bool p_borderless);
 	virtual bool get_borderless_window() const;
 
+	virtual void set_noactive_window(bool p_noactive);
+	virtual bool get_noactive_window() const;
+
 	virtual bool get_window_per_pixel_transparency_enabled() const;
 	virtual void set_window_per_pixel_transparency_enabled(bool p_enabled);
 
