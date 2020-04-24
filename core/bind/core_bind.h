@@ -155,6 +155,9 @@ public:
 	void set_clipboard(const String &p_text);
 	String get_clipboard() const;
 
+	void set_dragged(Rect2 dragRect);
+	Rect2 get_dragged();
+
 	void set_video_mode(const Size2 &p_size, bool p_fullscreen, bool p_resizeable, int p_screen = 0);
 	Size2 get_video_mode(int p_screen = 0) const;
 	bool is_video_mode_fullscreen(int p_screen = 0) const;
