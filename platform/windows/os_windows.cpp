@@ -58,6 +58,10 @@
 #include <regstr.h>
 #include <shlobj.h>
 
+
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+
 static const WORD MAX_CONSOLE_LINES = 1500;
 
 extern "C" {
@@ -312,8 +316,8 @@ void OS_Windows::_drag_event(float p_x, float p_y, int idx) {
 	curr->get() = Vector2(p_x, p_y);
 };
 
-LRESULT OS_Windows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-
+#define BORDER_WIDTH 8
+LRESULT OS_Windows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 	if (drop_events) {
 
 		if (user_proc) {
@@ -348,8 +352,78 @@ LRESULT OS_Windows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 			break;
 		}
+		case WM_NCCALCSIZE: //TODO: wtf
+		{
+			if(video_mode.borderless_window){
+				if(wParam){
+					SetWindowLong( hWnd, 0, 0 ); 
+					return TRUE;
+				}
+				return FALSE;
+			}
+			break;
+		}
+		case WM_NCHITTEST:
+		{
+			if(video_mode.borderless_window){
+				RECT winrect;
+				GetWindowRect(hWnd, &winrect);
+				long x = GET_X_LPARAM(lParam);
+				long y = GET_Y_LPARAM(lParam);
+
+				// BOTTOM LEFT
+				if (x >= winrect.left && x < winrect.left + BORDER_WIDTH &&
+					y < winrect.bottom && y >= winrect.bottom - BORDER_WIDTH) {
+					return HTBOTTOMLEFT;
+				}
+				// BOTTOM RIGHT
+				if (x < winrect.right && x >= winrect.right - BORDER_WIDTH &&
+					y < winrect.bottom && y >= winrect.bottom - BORDER_WIDTH) {
+					return HTBOTTOMRIGHT;
+				}
+				// TOP LEFT
+				if (x >= winrect.left && x < winrect.left + BORDER_WIDTH &&
+					y >= winrect.top && y < winrect.top + BORDER_WIDTH) {
+					return HTTOPLEFT;
+				}
+				// TOP RIGHT
+				if (x < winrect.right && x >= winrect.right - BORDER_WIDTH &&
+					y >= winrect.top && y < winrect.top + BORDER_WIDTH) {
+					return HTTOPRIGHT;
+				}
+				// LEFT
+				if (x >= winrect.left && x < winrect.left + BORDER_WIDTH) {
+					return HTLEFT;
+				}
+				// RIGHT
+				if (x < winrect.right && x >= winrect.right - BORDER_WIDTH) {
+					return HTRIGHT;
+				}
+				// BOTTOM
+				if (y < winrect.bottom && y >= winrect.bottom - BORDER_WIDTH) {
+					return HTBOTTOM;
+				}
+				// TOP
+				if (y >= winrect.top && y < winrect.top + BORDER_WIDTH/2) {
+					return HTTOP;
+				}
+				
+				x -= winrect.left;
+				y -= winrect.top;
+				if(x >= drag_rect.position.x && x <= (drag_rect.position.x + drag_rect.size.x)
+					&& y >= drag_rect.position.y && y <= (drag_rect.position.y + drag_rect.size.y)){
+						return HTCAPTION;
+				}
+			}
+			break;
+		}
 		case WM_ACTIVATE: // Watch For Window Activate Message
 		{
+			if(video_mode.borderless_window){
+				MARGINS frame = { 0, 0, 0, 1 };
+				DwmExtendFrameIntoClientArea(hWnd, &frame);
+				SetWindowPos( hWnd, nullptr, 0, 0, 0, 0, SWP_NOZORDER|SWP_NOOWNERZORDER|SWP_NOMOVE|SWP_NOSIZE|SWP_FRAMECHANGED);
+			}
 			minimized = HIWORD(wParam) != 0;
 			if (!main_loop) {
 				return 0;
@@ -1344,11 +1418,12 @@ Error OS_Windows::initialize(const VideoMode &p_desired, int p_video_driver, int
 	DWORD dwExStyle;
 	DWORD dwStyle;
 
-	if (video_mode.fullscreen || video_mode.borderless_window) {
-
+	if (video_mode.fullscreen) {
 		dwExStyle = WS_EX_APPWINDOW;
 		dwStyle = WS_POPUP;
-
+	} else if(video_mode.borderless_window){
+		dwExStyle = WS_EX_APPWINDOW;
+		dwStyle = WS_CAPTION | WS_VISIBLE | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 	} else {
 		dwExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
 		dwStyle = WS_OVERLAPPEDWINDOW;
@@ -1628,6 +1703,14 @@ String OS_Windows::get_clipboard() const {
 
 	return ret;
 };
+
+void OS_Windows::set_dragged(Rect2 dragRect){
+	drag_rect = dragRect;
+}
+
+Rect2 OS_Windows::get_dragged(){
+	return drag_rect;
+}
 
 void OS_Windows::delete_main_loop() {
 
@@ -2220,8 +2303,10 @@ bool OS_Windows::get_borderless_window() {
 }
 
 void OS_Windows::_update_window_style(bool p_repaint, bool p_maximized) {
-	if (video_mode.fullscreen || video_mode.borderless_window) {
+	if (video_mode.fullscreen) {
 		SetWindowLongPtr(hWnd, GWL_STYLE, WS_SYSMENU | WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE);
+	} else if (video_mode.borderless_window) {
+		SetWindowLongPtr(hWnd, GWL_STYLE, WS_CAPTION | WS_VISIBLE | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
 	} else {
 		if (video_mode.resizable) {
 			if (p_maximized) {

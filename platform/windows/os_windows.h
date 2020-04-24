@@ -278,6 +278,8 @@ protected:
 	bool console_visible;
 	bool was_maximized;
 
+	Rect2 drag_rect = Rect2();
+
 public:
 	LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -369,6 +371,9 @@ public:
 
 	virtual void set_clipboard(const String &p_text);
 	virtual String get_clipboard() const;
+
+	virtual void set_dragged(Rect2 dragRect);
+	virtual Rect2 get_dragged();
 
 	void set_cursor_shape(CursorShape p_shape);
 	CursorShape get_cursor_shape() const;

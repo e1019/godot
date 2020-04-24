@@ -176,6 +176,9 @@ public:
 	virtual void set_clipboard(const String &p_text);
 	virtual String get_clipboard() const;
 
+	virtual void set_dragged(Rect2 dragRect) {}
+	virtual Rect2 get_dragged() {return Rect2();}
+
 	virtual void set_video_mode(const VideoMode &p_video_mode, int p_screen = 0) = 0;
 	virtual VideoMode get_video_mode(int p_screen = 0) const = 0;
 	virtual void get_fullscreen_mode_list(List<VideoMode> *p_list, int p_screen = 0) const = 0;
