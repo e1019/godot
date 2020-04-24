@@ -63,6 +63,7 @@ RasterizerCanvasGLES2::BatchData::BatchData() {
 	diagnose_frame = false;
 	next_diagnose_tick = 10000;
 	diagnose_frame_number = 9999999999; // some high number
+	join_across_z_indices = true;
 
 	settings_use_batching_original_choice = false;
 	settings_flash_batching = false;
@@ -83,6 +84,19 @@ void RasterizerCanvasGLES2::RenderItemState::reset() {
 	final_modulate = Color(-1.0, -1.0, -1.0, -1.0); // just something unlikely
 
 	joined_item = nullptr;
+}
+
+// just translate the color into something easily readable and not too verbose
+String RasterizerCanvasGLES2::BatchColor::to_string() const {
+	String sz = "{";
+	const float *data = get_data();
+	for (int c = 0; c < 4; c++) {
+		float f = data[c];
+		int val = ((f * 255.0f) + 0.5f);
+		sz += String(Variant(val)) + " ";
+	}
+	sz += "}";
+	return sz;
 }
 
 RasterizerStorageGLES2::Texture *RasterizerCanvasGLES2::_get_canvas_texture(const RID &p_texture) const {
@@ -494,37 +508,44 @@ void RasterizerCanvasGLES2::_batch_translate_to_colored() {
 	for (int n = 0; n < bdata.batches.size(); n++) {
 		const Batch &source_batch = bdata.batches[n];
 
-		bool needs_new_batch;
+		bool needs_new_batch = true;
 
 		if (dest_batch) {
-			// is the dest batch the same except for the color?
-			if ((dest_batch->batch_texture_id == source_batch.batch_texture_id) && (dest_batch->type == source_batch.type)) {
-				// add to previous batch
-				dest_batch->num_commands += source_batch.num_commands;
-				needs_new_batch = false;
+			if (dest_batch->type == source_batch.type) {
+				if (source_batch.type == Batch::BT_RECT) {
+					if (dest_batch->batch_texture_id == source_batch.batch_texture_id) {
+						// add to previous batch
+						dest_batch->num_commands += source_batch.num_commands;
+						needs_new_batch = false;
 
-				// create the colored verts (only if not default)
-				if (source_batch.type != Batch::BT_DEFAULT) {
-					int first_vert = source_batch.first_quad * 4;
-					int end_vert = 4 * (source_batch.first_quad + source_batch.num_commands);
+						// create the colored verts (only if not default)
+						int first_vert = source_batch.first_quad * 4;
+						int end_vert = 4 * (source_batch.first_quad + source_batch.num_commands);
 
-					for (int v = first_vert; v < end_vert; v++) {
-						const BatchVertex &bv = bdata.vertices[v];
-						BatchVertexColored *cv = bdata.vertices_colored.request();
+						for (int v = first_vert; v < end_vert; v++) {
+							const BatchVertex &bv = bdata.vertices[v];
+							BatchVertexColored *cv = bdata.vertices_colored.request();
 #ifdef DEBUG_ENABLED
-						CRASH_COND(!cv);
+							CRASH_COND(!cv);
 #endif
-						cv->pos = bv.pos;
-						cv->uv = bv.uv;
-						cv->col = source_batch.color;
-					}
+							cv->pos = bv.pos;
+							cv->uv = bv.uv;
+							cv->col = source_batch.color;
+						}
+					} // textures match
+				} else {
+					// default
+					// we can still join, but only under special circumstances
+					// does this ever happen? not sure at this stage, but left for future expansion
+					uint32_t source_last_command = source_batch.first_command + source_batch.num_commands;
+					if (source_last_command == dest_batch->first_command) {
+						dest_batch->num_commands += source_batch.num_commands;
+						needs_new_batch = false;
+					} // if the commands line up exactly
 				}
-			} else {
-				needs_new_batch = true;
-			}
-		} else {
-			needs_new_batch = true;
-		}
+			} // if both batches are the same type
+
+		} // if dest batch is valid
 
 		if (needs_new_batch) {
 			dest_batch = bdata.batches_temp.request();
@@ -646,31 +667,112 @@ void RasterizerCanvasGLES2::_batch_render_rects(const Batch &p_batch, Rasterizer
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
+#ifdef DEBUG_ENABLED
+String RasterizerCanvasGLES2::get_command_type_string(const Item::Command &p_command) const {
+	String sz = "";
+
+	switch (p_command.type) {
+		default:
+			break;
+		case Item::Command::TYPE_LINE: {
+			sz = "l";
+		} break;
+		case Item::Command::TYPE_POLYLINE: {
+			sz = "PL";
+		} break;
+		case Item::Command::TYPE_RECT: {
+			sz = "r";
+		} break;
+		case Item::Command::TYPE_NINEPATCH: {
+			sz = "n";
+		} break;
+		case Item::Command::TYPE_PRIMITIVE: {
+			sz = "PR";
+		} break;
+		case Item::Command::TYPE_POLYGON: {
+			sz = "p";
+		} break;
+		case Item::Command::TYPE_MESH: {
+			sz = "m";
+		} break;
+		case Item::Command::TYPE_MULTIMESH: {
+			sz = "MM";
+		} break;
+		case Item::Command::TYPE_PARTICLES: {
+			sz = "PA";
+		} break;
+		case Item::Command::TYPE_CIRCLE: {
+			sz = "c";
+		} break;
+		case Item::Command::TYPE_TRANSFORM: {
+			sz = "t";
+
+			// add a bit more info in debug build
+			const Item::CommandTransform *transform = static_cast<const Item::CommandTransform *>(&p_command);
+			const Transform2D &mat = transform->xform;
+
+			sz += " ";
+			sz += String(Variant(mat.elements[2]));
+			sz += " ";
+		} break;
+		case Item::Command::TYPE_CLIP_IGNORE: {
+			sz = "CI";
+		} break;
+	} // switch
+
+	return sz;
+}
+
 void RasterizerCanvasGLES2::diagnose_batches(Item::Command *const *p_commands) {
 	int num_batches = bdata.batches.size();
 
+	BatchColor curr_color;
+	curr_color.set(Color(-1, -1, -1, -1));
+	bool first_color_change = true;
+
 	for (int batch_num = 0; batch_num < num_batches; batch_num++) {
 		const Batch &batch = bdata.batches[batch_num];
-		bdata.frame_string += "\t\tbatch ";
+		bdata.frame_string += "\t\t\tbatch ";
 
 		switch (batch.type) {
 			case Batch::BT_RECT: {
 				bdata.frame_string += "R ";
+				bdata.frame_string += itos(batch.first_command) + "-";
 				bdata.frame_string += itos(batch.num_commands);
 				bdata.frame_string += " [" + itos(batch.batch_texture_id) + "]";
+
+				bdata.frame_string += " " + batch.color.to_string();
+
 				if (batch.num_commands > 1) {
-					bdata.frame_string += " MULTI\n";
-				} else {
-					bdata.frame_string += "\n";
+					bdata.frame_string += " MULTI";
 				}
+				if (curr_color != batch.color) {
+					curr_color = batch.color;
+					if (!first_color_change) {
+						bdata.frame_string += " color";
+					} else {
+						first_color_change = false;
+					}
+				}
+				bdata.frame_string += "\n";
 			} break;
 			default: {
 				bdata.frame_string += "D ";
-				bdata.frame_string += itos(batch.num_commands) + "\n";
+				bdata.frame_string += itos(batch.first_command) + "-";
+				bdata.frame_string += itos(batch.num_commands) + " ";
+
+				int num_show = MIN(batch.num_commands, 16);
+				for (int n = 0; n < num_show; n++) {
+					const Item::Command &comm = *p_commands[batch.first_command + n];
+					bdata.frame_string += get_command_type_string(comm) + " ";
+				}
+
+				bdata.frame_string += "\n";
 			} break;
 		}
 	}
 }
+#endif
 
 void RasterizerCanvasGLES2::render_batches(Item::Command *const *p_commands, Item *p_current_clip, bool &r_reclip, RasterizerStorageGLES2::Material *p_material) {
 
@@ -1592,9 +1694,11 @@ void RasterizerCanvasGLES2::flush_render_batches(Item *p_first_item, Item *p_cur
 
 	Item::Command *const *commands = p_first_item->commands.ptr();
 
+#ifdef DEBUG_ENABLED
 	if (bdata.diagnose_frame) {
 		diagnose_batches(commands);
 	}
+#endif
 
 	render_batches(commands, p_current_clip, r_reclip, p_material);
 }
@@ -1620,7 +1724,14 @@ void RasterizerCanvasGLES2::join_items(Item *p_item_list, int p_z) {
 
 	// join is whether to join to the previous batch.
 	// batch_break is whether to PREVENT the next batch from joining with us
-	bool batch_break = false;
+	// batch_break must be preserved over z_indices,
+	// so is stored in _render_item_state.join_batch_break
+
+	// if z ranged lights are present, sometimes we have to disable joining over z_indices.
+	// we do this here
+	if (!bdata.join_across_z_indices) {
+		_render_item_state.join_batch_break = true;
+	}
 
 	while (p_item_list) {
 
@@ -1628,7 +1739,7 @@ void RasterizerCanvasGLES2::join_items(Item *p_item_list, int p_z) {
 
 		bool join;
 
-		if (batch_break) {
+		if (_render_item_state.join_batch_break) {
 			// always start a new batch for this item
 			join = false;
 
@@ -1637,9 +1748,9 @@ void RasterizerCanvasGLES2::join_items(Item *p_item_list, int p_z) {
 			// even though we know join is false.
 			// also we need to run try_join_item for every item because it keeps the state up to date,
 			// if we didn't run it the state would be out of date.
-			try_join_item(ci, _render_item_state, batch_break);
+			try_join_item(ci, _render_item_state, _render_item_state.join_batch_break);
 		} else {
-			join = try_join_item(ci, _render_item_state, batch_break);
+			join = try_join_item(ci, _render_item_state, _render_item_state.join_batch_break);
 		}
 
 		// assume the first item will always return no join
@@ -1648,6 +1759,7 @@ void RasterizerCanvasGLES2::join_items(Item *p_item_list, int p_z) {
 			_render_item_state.joined_item->first_item_ref = bdata.item_refs.size();
 			_render_item_state.joined_item->num_item_refs = 1;
 			_render_item_state.joined_item->bounding_rect = ci->global_rect_cache;
+			_render_item_state.joined_item->z_index = p_z;
 
 			// add the reference
 			BItemRef *r = bdata.item_refs.request_with_grow();
@@ -1720,6 +1832,24 @@ void RasterizerCanvasGLES2::canvas_render_items_begin(const Color &p_modulate, L
 	_render_item_state.item_group_modulate = p_modulate;
 	_render_item_state.item_group_light = p_light;
 	_render_item_state.item_group_base_transform = p_base_transform;
+
+	// batch break must be preserved over the different z indices,
+	// to prevent joining to an item on a previous index if not allowed
+	_render_item_state.join_batch_break = false;
+
+	// whether to join across z indices depends on whether there are z ranged lights.
+	// joined z_index items can be wrongly classified with z ranged lights.
+	bdata.join_across_z_indices = true;
+
+	while (p_light) {
+		if ((p_light->z_min != VS::CANVAS_ITEM_Z_MIN) || (p_light->z_max != VS::CANVAS_ITEM_Z_MAX)) {
+			// prevent joining across z indices. This would have caused visual regressions
+			bdata.join_across_z_indices = false;
+			break;
+		}
+
+		p_light = p_light->next_ptr;
+	}
 }
 
 void RasterizerCanvasGLES2::canvas_render_items_end() {
@@ -2353,9 +2483,14 @@ void RasterizerCanvasGLES2::render_joined_item(const BItemJoined &p_bij, RenderI
 
 	storage->info.render._2d_item_count++;
 
+#ifdef DEBUG_ENABLED
 	if (bdata.diagnose_frame) {
 		bdata.frame_string += "\tjoined_item " + itos(p_bij.num_item_refs) + " refs\n";
+		if (p_bij.z_index != 0) {
+			bdata.frame_string += "\t\t(z " + itos(p_bij.z_index) + ")\n";
+		}
 	}
+#endif
 
 	// all the joined items will share the same state with the first item
 	Item *ci = bdata.item_refs[p_bij.first_item_ref].item;
@@ -2606,7 +2741,10 @@ void RasterizerCanvasGLES2::render_joined_item(const BItemJoined &p_bij, RenderI
 
 			// use the bounding rect of the joined items, NOT only the bounding rect of the first item.
 			// note this is a cost of batching, the light culling will be less effective
-			if (ci->light_mask & light->item_mask && r_ris.item_group_z >= light->z_min && r_ris.item_group_z <= light->z_max && p_bij.bounding_rect.intersects_transformed(light->xform_cache, light->rect_cache)) {
+
+			// note that the r_ris.item_group_z will be out of date because we are using deferred rendering till canvas_render_items_end()
+			// so we have to test z against the stored value in the joined item
+			if (ci->light_mask & light->item_mask && p_bij.z_index >= light->z_min && p_bij.z_index <= light->z_max && p_bij.bounding_rect.intersects_transformed(light->xform_cache, light->rect_cache)) {
 
 				//intersects this light
 
