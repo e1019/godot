@@ -162,6 +162,8 @@ class OS_X11 : public OS_Unix {
 	bool window_has_focus;
 	bool do_mouse_warp;
 
+	Rect2 drag_rect = Rect2();
+
 	const char *cursor_theme;
 	int cursor_size;
 	XcursorImage *img[CURSOR_MAX];
@@ -244,6 +246,10 @@ public:
 
 	virtual void set_clipboard(const String &p_text);
 	virtual String get_clipboard() const;
+
+	virtual void set_dragged(Rect2 dragRect);
+	virtual Rect2 get_dragged();
+
 
 	virtual void release_rendering_thread();
 	virtual void make_rendering_thread();

@@ -2335,6 +2335,107 @@ void OS_X11::process_xevents() {
 					event.xbutton.y = last_mouse_pos.y;
 				}
 
+
+				if((event.xbutton.button == 1) && (event.type == ButtonPress)){
+					auto x = event.xbutton.x;
+					auto y = event.xbutton.y;
+
+					Point2i window_pos = get_window_position();
+					Size2 windowsize = get_window_size();
+
+					auto left = (window_pos.x);
+					auto right = (window_pos.x + windowsize.x);
+					auto top = (window_pos.y);
+					auto bottom = (window_pos.y + windowsize.y);
+
+#define _NET_WM_MOVERESIZE_SIZE_TOPLEFT      0
+#define _NET_WM_MOVERESIZE_SIZE_TOP          1
+#define _NET_WM_MOVERESIZE_SIZE_TOPRIGHT     2
+#define _NET_WM_MOVERESIZE_SIZE_RIGHT        3
+#define _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT  4
+#define _NET_WM_MOVERESIZE_SIZE_BOTTOM       5
+#define _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT   6
+#define _NET_WM_MOVERESIZE_SIZE_LEFT         7
+#define _NET_WM_MOVERESIZE_MOVE              8   /* movement only */
+#define _NET_WM_MOVERESIZE_SIZE_KEYBOARD     9   /* size via keyboard */
+#define _NET_WM_MOVERESIZE_MOVE_KEYBOARD    10   /* move via keyboard */
+#define _NET_WM_MOVERESIZE_CANCEL           11   /* cancel operation */
+#define BORDER_WIDTH 8
+					int operation = -1;
+
+					x += window_pos.x;
+					y += window_pos.y;
+
+					// BOTTOM LEFT
+					if (x >= left && x < left + BORDER_WIDTH &&
+						y < bottom && y >= bottom - BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT; goto exitoutpls;
+					}
+					// BOTTOM RIGHT
+					if (x < right && x >= right - BORDER_WIDTH &&
+						y < bottom && y >= bottom - BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT; goto exitoutpls;
+					}
+					// TOP LEFT
+					if (x >= left && x < left + BORDER_WIDTH &&
+						y >= top && y < top + BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_TOPLEFT; goto exitoutpls;
+					}
+					// TOP RIGHT
+					if (x < right && x >= right - BORDER_WIDTH &&
+						y >= top && y < top + BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_TOPRIGHT; goto exitoutpls;
+					}
+					// LEFT
+					if (x >= left && x < left + BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_LEFT; goto exitoutpls;
+					}
+					// RIGHT
+					if (x < right && x >= right - BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_RIGHT; goto exitoutpls;
+					}
+					// BOTTOM
+					if (y < bottom && y >= bottom - BORDER_WIDTH) {
+						operation = _NET_WM_MOVERESIZE_SIZE_BOTTOM; goto exitoutpls;
+					}
+					// TOP
+					if (y >= top && y < top + BORDER_WIDTH/2) {
+						operation = _NET_WM_MOVERESIZE_SIZE_TOP; goto exitoutpls;
+					}
+
+					x -= window_pos.x;
+					y -= window_pos.y;
+
+					if(x >= drag_rect.position.x && x <= (drag_rect.position.x + drag_rect.size.x)
+						&& y >= drag_rect.position.y && y <= (drag_rect.position.y + drag_rect.size.y)){
+							operation = _NET_WM_MOVERESIZE_MOVE;
+							x += window_pos.x;
+							y += window_pos.y;
+							goto exitoutpls;
+					}
+
+
+exitoutpls:
+					if(operation != -1){
+						XClientMessageEvent xclient;
+						memset(&xclient, 0, sizeof(XClientMessageEvent));
+						XUngrabPointer(x11_display, 0);
+						XFlush(x11_display);
+						xclient.type = ClientMessage;
+						xclient.window = x11_window;
+						xclient.message_type = XInternAtom(x11_display, "_NET_WM_MOVERESIZE", False);
+						xclient.format = 32;
+						xclient.data.l[0] = x;
+						xclient.data.l[1] = y;
+						xclient.data.l[2] = operation;
+						xclient.data.l[3] = 0;
+						xclient.data.l[4] = 0;
+						// GLFW
+						XSendEvent(x11_display, DefaultRootWindow(x11_display), False, SubstructureRedirectMask | SubstructureNotifyMask, (XEvent *)&xclient);
+						break;
+					}
+				}
+
 				Ref<InputEventMouseButton> mb;
 				mb.instance();
 
@@ -2403,12 +2504,15 @@ void OS_X11::process_xevents() {
 					}
 				}
 
+
+
 				last_timestamp = event.xmotion.time;
 
 				// Motion is also simple.
 				// A little hack is in order
 				// to be able to send relative motion events.
 				Point2 pos(event.xmotion.x, event.xmotion.y);
+
 
 				// Avoidance of spurious mouse motion (see handling of touch)
 				bool filter = false;
@@ -2786,6 +2890,16 @@ String OS_X11::get_clipboard() const {
 
 	return ret;
 }
+
+
+void OS_X11::set_dragged(Rect2 dragRect){
+	drag_rect = dragRect;
+}
+
+Rect2 OS_X11::get_dragged(){
+	return drag_rect;
+}
+
 
 String OS_X11::get_name() const {
 
